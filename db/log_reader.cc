@@ -69,6 +69,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
   Slice fragment;
   while (true) {
+    // fragment是一个chunk的data部分
     const unsigned int record_type = ReadPhysicalRecord(&fragment); // 1个part
 
     // ReadPhysicalRecord may have only had an empty trailer remaining in its
@@ -125,6 +126,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
           ReportCorruption(fragment.size(),
                            "missing start of fragmented record(1)");
         } else {
+          // scratch保存每一块chunk的数据
           scratch->append(fragment.data(), fragment.size());
         }
         break;

@@ -90,7 +90,7 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
   }
 
   // Check the crc of the type and the block contents
-  const char* data = contents.data();  // Pointer to where Read put the data
+  const char* data = contents.data();  // Pointer to where Read put the data  整个block的content
   if (options.verify_checksums) {
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1)); // 跳过content+type,取出crc
     const uint32_t actual = crc32c::Value(data, n + 1); // 计算content+type的crc

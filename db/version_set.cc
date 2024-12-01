@@ -294,9 +294,9 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
   // level0从新SST到旧SST检查key是否存在
   if (!tmp.empty()) {
-    std::sort(tmp.begin(), tmp.end(), NewestFirst); 
+    std::sort(tmp.begin(), tmp.end(), NewestFirst);// number大的先检查
     for (uint32_t i = 0; i < tmp.size(); i++) {
-      if (!(*func)(arg, 0, tmp[i])) {
+      if (!(*func)(arg, 0, tmp[i])) {   // 在某个文件找到了，不需要再找了
         return;
       }
     }
@@ -308,7 +308,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     if (num_files == 0) continue;
 
     // Binary search to find earliest index whose largest key >= internal_key.
-    uint32_t index = FindFile(vset_->icmp_, files_[level], internal_key); // XXX: 为啥这里不能用user_key二分呢?
+    uint32_t index = FindFile(vset_->icmp_, files_[level], internal_key); // XXX: 为啥这里不能用user_key二分呢? 因为internal_key的比较会先比较user_key，相同则再比较seq_number
     if (index < num_files) {
       FileMetaData* f = files_[level][index];
       if (ucmp->Compare(user_key, f->smallest.user_key()) < 0) {
@@ -338,7 +338,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     VersionSet* vset;
     Status s;
     bool found;
-
+    // 在这个文件里匹配是否存在，不存在返回true，表示继续查找其它的
     static bool Match(void* arg, int level, FileMetaData* f) {
       State* state = reinterpret_cast<State*>(arg);
 
@@ -352,7 +352,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       state->last_file_read = f;
       state->last_file_read_level = level;
 
-      // table_cache是记录已经打开过的SST文件
+      // table_cache是记录已经打开过的SST文件, SaveValue是回调函数，处理找到键值后的情况
       state->s = state->vset->table_cache_->Get(*state->options, f->number,
                                                 f->file_size, state->ikey,
                                                 &state->saver, SaveValue);
@@ -1280,7 +1280,7 @@ Compaction* VersionSet::PickCompaction() {
       FileMetaData* f = current_->files_[level][i];
       if (compact_pointer_[level].empty() ||
           icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {  // compact_pointer是每层level的一个轮转指针，确保每个sst都陆续排队参与compact
-        c->inputs_[0].push_back(f); // 只选1个SST就break
+        c->inputs_[0].push_back(f); // 只选1个SST就break   每次起始的输入文件是轮转指针的下一个文件
         break; 
       }
     }
@@ -1467,6 +1467,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   c->edit_.SetCompactPointer(level, largest);
 }
 
+// 手动指定compaction范围
 Compaction* VersionSet::CompactRange(int level, const InternalKey* begin,
                                      const InternalKey* end) {
   std::vector<FileMetaData*> inputs;

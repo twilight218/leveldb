@@ -241,7 +241,7 @@ int SkipList<Key, Comparator>::RandomHeight() {
   // Increase height with probability 1 in kBranching
   static const unsigned int kBranching = 4;
   int height = 1;
-  while (height < kMaxHeight && rnd_.OneIn(kBranching)) {
+  while (height < kMaxHeight && rnd_.OneIn(kBranching)) {   // 每增加一层的概率是1/4
     height++;
   }
   assert(height > 0);
@@ -327,7 +327,7 @@ SkipList<Key, Comparator>::SkipList(Comparator cmp, Arena* arena)
       max_height_(1),
       rnd_(0xdeadbeef) {
   for (int i = 0; i < kMaxHeight; i++) {
-    head_->SetNext(i, nullptr);
+    head_->SetNext(i, nullptr);   // 后续操作可以立刻看到head的值
   }
 }
 
@@ -336,7 +336,7 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];
-  Node* x = FindGreaterOrEqual(key, prev);
+  Node* x = FindGreaterOrEqual(key, prev);    // FindGreaterOrEqual是使用了acquire内存序的，但是写线程只有一个，读取时不需要内存屏障
 
   // Our data structure does not allow duplicate insertion
   assert(x == nullptr || !Equal(key, x->key));
@@ -360,8 +360,9 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
   for (int i = 0; i < height; i++) {
     // NoBarrier_SetNext() suffices since we will add a barrier when
     // we publish a pointer to "x" in prev[i].
+    // NoBarrier_SetNext（）就足够了，因为当我们在prev[i]中发布指向“x”的指针时，我们将添加一个屏障。
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
-    prev[i]->SetNext(i, x);
+    prev[i]->SetNext(i, x);    // 设置x时添加了屏障，之前对x的操作都已经完成
   }
 }
 

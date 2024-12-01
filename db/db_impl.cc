@@ -537,7 +537,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
-      level = base->PickLevelForMemTableOutput(min_user_key, max_user_key); // key没有重叠的话，直接下推level到深层，细节先不看
+      level = base->PickLevelForMemTableOutput(min_user_key, max_user_key); // key没有重叠的话，直接下推level到深层，细节先不看  minor compaction的优化
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.smallest,  
                   meta.largest);
@@ -704,6 +704,7 @@ void DBImpl::BackgroundCall() {
   background_work_finished_signal_.SignalAll();
 }
 
+// compaction执行
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
@@ -924,7 +925,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;
-  std::string current_user_key;
+  std::string
+  current_user_key;
   bool has_current_user_key = false;
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;  // 当前ukey上一次seq id
   while (input->Valid() && !shutting_down_.load(std::memory_order_acquire)) {
@@ -1146,7 +1148,6 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   Version::GetStats stats;
 
   // Unlock while reading from files and memtables
-  // Get的时候Put不会发生，leveldb是单线程API
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
@@ -1162,6 +1163,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     mutex_.Lock();
   }
 
+  // 更新version的status，可能进行compaction
   if (have_stat_update && current->UpdateStats(stats)) {
     MaybeScheduleCompaction();
   }
@@ -1227,14 +1229,15 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     return w.status;
   }
   
-  // May temporarily unlock and wait.
+  // May temporarily unlock and wait.   updates == nullptr会强制触发minor compaction
   Status status = MakeRoomForWrite(updates == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   printf("last_sequence=%llu\n",last_sequence);
   Writer* last_writer = &w;
   if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
-    WriteBatch* write_batch = BuildBatchGroup(&last_writer);  
-    WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
+    // BuildBatchGroup从last writer开始遍历writers_，直到没有其他writer，或者是本次batch空间满了。这个操作就是合并写
+    WriteBatch* write_batch = BuildBatchGroup(&last_writer);
+    WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);  // 一整个writebatch的sequence+1
     last_sequence += WriteBatchInternal::Count(write_batch);
 
     // Add to log and apply to memtable.  We can release the lock
@@ -1278,7 +1281,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     if (ready == last_writer) break;
   }
 
-  // Notify new head of write queue
+  // Notify new head of write queue  如果还有writer，唤醒作为队头
   if (!writers_.empty()) {
     writers_.front()->cv.Signal();
   }
@@ -1348,7 +1351,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Yield previous error
       s = bg_error_;
       break;
-    } else if (allow_delay && versions_->NumLevelFiles(0) >=
+    } else if (allow_delay && versions_->NumLevelFiles(0) >=        // level0层文件超过8个，减慢写入速度
                                   config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
@@ -1361,19 +1364,19 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {  // 如果mem还有足够空间
       // There is room in current memtable
       break;
-    } else if (imm_ != nullptr) {
+    } else if (imm_ != nullptr) {     // 如果imm还存在，那么需要等待imm写入0层，再将mem变为imm
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
       Log(options_.info_log, "Current memtable full; waiting...\n");
       background_work_finished_signal_.Wait();
-    } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
+    } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {  // level0层文件超过12个，停止写入
       // There are too many level-0 files.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       background_work_finished_signal_.Wait();
-    } else {
+    } else {      // 尝试新建一个mem写入，并开始将
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
@@ -1402,7 +1405,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
 
       logfile_ = lfile;
       logfile_number_ = new_log_number;
-      log_ = new log::Writer(lfile);
+      log_ = new log::Writer(lfile);    // 新建一个log处理写入
       imm_ = mem_;
       has_imm_.store(true, std::memory_order_release);
       mem_ = new MemTable(internal_comparator_);

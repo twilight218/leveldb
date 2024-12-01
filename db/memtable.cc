@@ -4,6 +4,8 @@
 
 #include "db/memtable.h"
 #include "db/dbformat.h"
+#include <list>
+
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
@@ -29,6 +31,8 @@ size_t MemTable::ApproximateMemoryUsage() { return arena_.MemoryUsage(); }
 int MemTable::KeyComparator::operator()(const char* aptr,
                                         const char* bptr) const {
   // Internal keys are encoded as length-prefixed strings.
+  // 去除internal_key的变长长度，得到实际的internal_key用于Get查询时的比较
+  // 这里一个是skiplist的key，一个是构造的lookup_key，得到的都是对应的internal_key
   Slice a = GetLengthPrefixedSlice(aptr);
   Slice b = GetLengthPrefixedSlice(bptr);
   return comparator.Compare(a, b);
@@ -89,12 +93,17 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
                              internal_key_size + VarintLength(val_size) +
                              val_size;
   char* buf = arena_.Allocate(encoded_len);
+  // 先存internal_key_size
   char* p = EncodeVarint32(buf, internal_key_size);
+  // 再存key
   std::memcpy(p, key.data(), key_size);
   p += key_size;
+  // 再存序列号和type
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
+  // 再存value_size
   p = EncodeVarint32(p, val_size);
+  // 再存value
   std::memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
   table_.Insert(buf);

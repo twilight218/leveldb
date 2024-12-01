@@ -33,7 +33,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     Slice key;
     for (; iter->Valid(); iter->Next()) {
       key = iter->key();
-      builder->Add(key, iter->value());
+      builder->Add(key, iter->value());     // 往sst中写入
     }
     if (!key.empty()) {
       meta->largest.DecodeFrom(key);

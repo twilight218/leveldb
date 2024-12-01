@@ -18,8 +18,8 @@ class BloomFilterPolicy : public FilterPolicy {
  public:
   explicit BloomFilterPolicy(int bits_per_key) : bits_per_key_(bits_per_key) {
     // We intentionally round down to reduce probing cost a little bit
-    // 每个key实际要去设置的bit数量会比设定的少69%
-    k_ = static_cast<size_t>(bits_per_key * 0.69);  // 0.69 =~ ln(2) 
+    // k = ln(2) * bits_per_key 准确率最高
+    k_ = static_cast<size_t>(bits_per_key * 0.69);  // 0.69 ~= ln(2)
     if (k_ < 1) k_ = 1;
     if (k_ > 30) k_ = 30;
   }
@@ -40,7 +40,7 @@ class BloomFilterPolicy : public FilterPolicy {
     const size_t init_size = dst->size();
     dst->resize(init_size + bytes, 0);  // 这部分是bloom bits
     dst->push_back(static_cast<char>(k_));  // Remember # of probes in filter  这个是k_值，在bloom filter末尾占用1字节
-    char* array = &(*dst)[init_size];
+    char* array = &(*dst)[init_size];   // array是实际bl 的起始地址
     for (int i = 0; i < n; i++) { // 1个key做1个hash值，然后循环k_次放到多个位置
       // Use double-hashing to generate a sequence of hash values.
       // See analysis in [Kirsch,Mitzenmacher 2006].

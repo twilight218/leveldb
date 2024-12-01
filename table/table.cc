@@ -158,7 +158,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
   Cache::Handle* cache_handle = nullptr;
 
   BlockHandle handle;
-  Slice input = index_value;
+  Slice input = index_value;  // index_value是data block的offset
   Status s = handle.DecodeFrom(&input);
   // We intentionally allow extra stuff in index_value so that we
   // can add more features in the future.
@@ -172,7 +172,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != nullptr) {
-        block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+        block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));  // value是整个block的内容
       } else {
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
@@ -226,7 +226,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
       // Not found
     } else {
       Iterator* block_iter = BlockReader(this, options, iiter->value());  // index记录指向了data block开始位置
-      block_iter->Seek(k);
+      block_iter->Seek(k);   // 找到第一个大于等于key的位置
       if (block_iter->Valid()) {
         (*handle_result)(arg, block_iter->key(), block_iter->value());
       }

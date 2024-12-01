@@ -32,6 +32,7 @@ void FilterBlockBuilder::AddKey(const Slice& key) {
   keys_.append(k.data(), k.size()); // 把key追加到总字符串中
 }
 
+// filter block只有一个，在最后记录每个filter的偏移和偏移列表的起始位置和基数，返回整个bloom filter
 Slice FilterBlockBuilder::Finish() {
   if (!start_.empty()) {
     GenerateFilter(); // 最后1个datablock是finish()调用而不是startblock()，最后1个datablock的key全塞进1个Filter

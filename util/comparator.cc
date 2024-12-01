@@ -28,6 +28,7 @@ class BytewiseComparatorImpl : public Comparator {
     return a.compare(b);
   }
 
+  // 找到start和limit的最短分隔符，把start变成它。如apple和appz，start变为appm
   void FindShortestSeparator(std::string* start,
                              const Slice& limit) const override {
     // Find length of common prefix
@@ -51,6 +52,7 @@ class BytewiseComparatorImpl : public Comparator {
     }
   }
 
+  // 找到key的最短后继
   void FindShortSuccessor(std::string* key) const override {
     // Find first character that can be incremented
     size_t n = key->size();

@@ -46,7 +46,7 @@ struct LRUHandle {
   LRUHandle* next_hash;
   LRUHandle* next;
   LRUHandle* prev;
-  size_t charge;  // TODO(opt): Only allow uint32_t?
+  size_t charge;  // TODO(opt): Only allow uint32_t?   一个block块大小
   size_t key_length;
   bool in_cache;     // Whether entry is in the cache.
   uint32_t refs;     // References, including cache reference, if present.
@@ -105,9 +105,9 @@ class HandleTable {
  private:
   // The table consists of an array of buckets where each bucket is
   // a linked list of cache entries that hash into the bucket.
-  uint32_t length_;
-  uint32_t elems_;
-  LRUHandle** list_;
+  uint32_t length_;   // 哈希桶数量
+  uint32_t elems_;    // 当前元素数量
+  LRUHandle** list_;  // 一维数组
 
   // Return a pointer to slot that points to a cache entry that
   // matches key/hash.  If there is no such cache entry, return a
@@ -115,7 +115,7 @@ class HandleTable {
   LRUHandle** FindPointer(const Slice& key, uint32_t hash) {
     LRUHandle** ptr = &list_[hash & (length_ - 1)];
     while (*ptr != nullptr && ((*ptr)->hash != hash || key != (*ptr)->key())) {
-      ptr = &(*ptr)->next_hash;
+      ptr = &(*ptr)->next_hash;       // 同一个哈希桶的下一个
     }
     return ptr;
   }
@@ -129,14 +129,14 @@ class HandleTable {
     memset(new_list, 0, sizeof(new_list[0]) * new_length);
     uint32_t count = 0;
     for (uint32_t i = 0; i < length_; i++) {
-      LRUHandle* h = list_[i];
+      LRUHandle* h = list_[i];    // 这是一个哈希桶，里面以链表形式存在，next_hash指向链表下一个
       while (h != nullptr) {
         LRUHandle* next = h->next_hash;
         uint32_t hash = h->hash;
-        LRUHandle** ptr = &new_list[hash & (new_length - 1)];
+        LRUHandle** ptr = &new_list[hash & (new_length - 1)];  // 通过位运算快速找到新的哈希桶
         h->next_hash = *ptr;
-        *ptr = h;
-        h = next;
+        *ptr = h;   // 新桶第一个元素指向当前h
+        h = next;   // 处理当前链表的下一个元素
         count++;
       }
     }
@@ -324,7 +324,7 @@ void LRUCache::Erase(const Slice& key, uint32_t hash) {
 void LRUCache::Prune() {
   MutexLock l(&mutex_);
   while (lru_.next != &lru_) {
-    LRUHandle* e = lru_.next;
+    LRUHandle* e = lru_.next; // 最后一个，最老的
     assert(e->refs == 1);
     bool erased = FinishErase(table_.Remove(e->key(), e->hash));
     if (!erased) {  // to avoid unused variable when compiled NDEBUG
@@ -350,7 +350,7 @@ class ShardedLRUCache : public Cache {
 
  public:
   explicit ShardedLRUCache(size_t capacity) : last_id_(0) {
-    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
+    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;    // 每个LRUCache shard分多少个，向上取整
     for (int s = 0; s < kNumShards; s++) {
       shard_[s].SetCapacity(per_shard);
     }

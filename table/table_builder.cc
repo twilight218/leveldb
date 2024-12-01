@@ -38,12 +38,12 @@ struct TableBuilder::Rep {
   Options options;
   Options index_block_options;
   WritableFile* file;
-  uint64_t offset;
+  uint64_t offset;  // 当前写的内容到哪了，包括data、filter、meta index、index
   Status status;
   BlockBuilder data_block;
   BlockBuilder index_block;
   std::string last_key;
-  int64_t num_entries;
+  int64_t num_entries;    // 这个sst文件的key
   bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
 
@@ -55,9 +55,9 @@ struct TableBuilder::Rep {
   // entries in the first block and < all entries in subsequent
   // blocks.
   //
-  // Invariant: r->pending_index_entry is true only if data_block is empty.
+  // Invariant: r->pending_index_entry is true only if data_block is empty.  开新的data_block了，这个设为true
   bool pending_index_entry;
-  BlockHandle pending_handle;  // Handle to add to index block
+  BlockHandle pending_handle;  // Handle to add to index block  上一个data block的偏移和长度信息
 
   std::string compressed_output;
 };
@@ -200,6 +200,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   block->Reset(); // 清空block继续构造下1个
 }
 
+// 把block内容、压缩类型、crc校验码写入文件，同时会设置传入的BlockHandle
 void TableBuilder::WriteRawBlock(const Slice& block_contents,
                                  CompressionType type, BlockHandle* handle) {
   Rep* r = rep_;
@@ -257,7 +258,7 @@ Status TableBuilder::Finish() {
   // 把index block
   // Write index block
   if (ok()) {
-    if (r->pending_index_entry) {
+    if (r->pending_index_entry) { // 如果要写一个新的index block
       r->options.comparator->FindShortSuccessor(&r->last_key);
       std::string handle_encoding;
       r->pending_handle.EncodeTo(&handle_encoding);

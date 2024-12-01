@@ -53,7 +53,7 @@ class TableCache {
   Env* const env_;
   const std::string dbname_;
   const Options& options_;
-  Cache* cache_;
+  Cache* cache_;      // table cache，已打开的文件
 };
 
 }  // namespace leveldb

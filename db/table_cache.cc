@@ -69,7 +69,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
-      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);  // 把table的元信息cache
     }
   }
   return s;
@@ -104,7 +104,7 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
   Cache::Handle* handle = nullptr;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
-    Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table; 
+    Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
     // SST内查找key
     s = t->InternalGet(options, k, arg, handle_result); // k是internal key
     cache_->Release(handle);

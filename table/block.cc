@@ -82,8 +82,8 @@ class Block::Iter : public Iterator {
   uint32_t const num_restarts_;  // Number of uint32_t entries in restart array
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
-  uint32_t current_;
-  uint32_t restart_index_;  // Index of restart block in which current_ falls
+  uint32_t current_;        // 当前entry地址
+  uint32_t restart_index_;  // Index of restart block in which current_ falls  当前entry在哪个restart point后
   std::string key_;
   Slice value_;
   Status status_;
@@ -190,12 +190,12 @@ class Block::Iter : public Iterator {
       uint32_t shared, non_shared, value_length;
       const char* key_ptr =
           DecodeEntry(data_ + region_offset, data_ + restarts_, &shared,
-                      &non_shared, &value_length);
+                      &non_shared, &value_length);   // key_ptr是这个重启点对应的entry的非共享部分
       if (key_ptr == nullptr || (shared != 0)) {
         CorruptionError();
         return;
       }
-      Slice mid_key(key_ptr, non_shared);
+      Slice mid_key(key_ptr, non_shared);  // 就是重启点对应的key
       if (Compare(mid_key, target) < 0) {
         // Key at "mid" is smaller than "target".  Therefore all
         // blocks before "mid" are uninteresting.
@@ -220,6 +220,7 @@ class Block::Iter : public Iterator {
       if (!ParseNextKey()) {
         return;
       }
+      // 先找下一个key，再去比较，跳过了left
       if (Compare(key_, target) >= 0) {
         return;
       }
@@ -268,7 +269,7 @@ class Block::Iter : public Iterator {
       key_.resize(shared);  // 缩到shared长度
       key_.append(p, non_shared); // 再追加unshared部分
       value_ = Slice(p + non_shared, value_length);
-      // ??????
+      // ??????  如果跨越了restart point的话，把restart_index移到当前entry所在的restart index
       while (restart_index_ + 1 < num_restarts_ &&
              GetRestartPoint(restart_index_ + 1) < current_) {
         ++restart_index_;

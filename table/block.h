@@ -35,7 +35,7 @@ class Block {
 
   const char* data_;
   size_t size_;
-  uint32_t restart_offset_;  // Offset in data_ of restart array
+  uint32_t restart_offset_;  // Offset in data_ of restart array   restart point起始点
   bool owned_;               // Block owns data_[]
 };
 
